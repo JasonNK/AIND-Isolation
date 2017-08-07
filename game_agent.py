@@ -3,6 +3,7 @@ test your agent's strength against a set of known agents using tournament.py
 and include the results in your report.
 """
 import random
+import math
 
 
 class SearchTimeout(Exception):
@@ -34,8 +35,16 @@ def custom_score(game, player):
     float
         The heuristic value of the current game state to the specified player.
     """
-    # TODO: finish this function!
-    raise NotImplementedError
+
+    if game.is_loser(player=player):
+        return -math.inf
+    if game.is_winner(player=player):
+        return math.inf
+
+    legal_moves = game.get_legal_moves(player=player)
+    legal_moves_of_opponent = game.get_legal_moves(player=game.get_opponent(player=player))
+
+    return float(len(legal_moves) - len(legal_moves_of_opponent))
 
 
 def custom_score_2(game, player):
@@ -60,8 +69,15 @@ def custom_score_2(game, player):
     float
         The heuristic value of the current game state to the specified player.
     """
-    # TODO: finish this function!
-    raise NotImplementedError
+    if game.is_loser(player=player):
+        return -math.inf
+    if game.is_winner(player=player):
+        return math.inf
+
+    legal_moves = game.get_legal_moves(player=player)
+    legal_moves_of_opponent = game.get_legal_moves(player=game.get_opponent(player=player))
+
+    return float(len(legal_moves) - 2 * len(legal_moves_of_opponent))
 
 
 def custom_score_3(game, player):
@@ -86,9 +102,14 @@ def custom_score_3(game, player):
     float
         The heuristic value of the current game state to the specified player.
     """
-    # TODO: finish this function!
-    raise NotImplementedError
+    if game.is_loser(player=player):
+        return -math.inf
+    if game.is_winner(player=player):
+        return math.inf
 
+    w, h = game.width / 2., game.height / 2.
+    y, x = game.get_player_location(player)
+    return float((h - y)**2 + (w - x)**2)
 
 class IsolationPlayer:
     """Base class for minimax and alphabeta agents -- this class is never
@@ -208,16 +229,48 @@ class MinimaxPlayer(IsolationPlayer):
                 pseudocode) then you must copy the timer check into the top of
                 each helper function or else your agent will timeout during
                 testing.
+                      
         """
         if self.time_left() < self.TIMER_THRESHOLD:
             raise SearchTimeout()
-        print(game.get_legal_moves())
-        return game.get_legal_moves()[0]
-        # TODO: finish this function!
+        if depth == 0:
+            return -1, -1
+        val = -math.inf, (-1, -1)
+        for move in game.get_legal_moves():
+            child_node = game.forecast_move(move)
+            max_v = self.min_val(child_node, depth - 1)
+            val = max(val, (max_v[0], move))
+        return val[1]
 
+    def max_val(self, game, depth):
+        """
 
+        :return: 
+        """
+        if self.time_left() < self.TIMER_THRESHOLD:
+            raise SearchTimeout()
+        if depth == 0:
+            return self.score(game, self), (-1, -1)  # add self to the score, it passes the funcationality
+        val = -math.inf, (-1, -1)
+        for move in game.get_legal_moves():
+            child_node = game.forecast_move(move)
+            val = max(val, self.min_val(child_node, depth - 1))
+        return val
 
-        raise NotImplementedError
+    def min_val(self, game, depth):
+        """
+    
+        :return: 
+        """
+        if self.time_left() < self.TIMER_THRESHOLD:
+            raise SearchTimeout()
+        if depth == 0:
+            return self.score(game, self), (-1, -1)
+        val = +math.inf, (-1, -1)  #TODO
+        for move in game.get_legal_moves():
+            child_node = game.forecast_move(move)
+            val = min(val, self.max_val(child_node, depth - 1))
+        return val
 
 
 class AlphaBetaPlayer(IsolationPlayer):
@@ -258,8 +311,13 @@ class AlphaBetaPlayer(IsolationPlayer):
         """
         self.time_left = time_left
 
-        # TODO: finish this function!
-        raise NotImplementedError
+        depth = 4  #TODO: depth of the alphabeta
+        arr = []
+        try:
+            for i in range(depth):
+                arr.append(self.alphabeta(game, depth))
+        except:
+            return arr[-1]
 
     def alphabeta(self, game, depth, alpha=float("-inf"), beta=float("inf")):
         """Implement depth-limited minimax search with alpha-beta pruning as
@@ -305,9 +363,51 @@ class AlphaBetaPlayer(IsolationPlayer):
                 pseudocode) then you must copy the timer check into the top of
                 each helper function or else your agent will timeout during
                 testing.
+        
         """
         if self.time_left() < self.TIMER_THRESHOLD:
             raise SearchTimeout()
+        if depth == 0:
+            return -1, -1
 
-        # TODO: finish this function!
-        raise NotImplementedError
+        return self.max_alpha_beta(game, depth, alpha, beta)[1]
+
+    def max_alpha_beta(self, game, depth, alpha, beta):
+        """
+ 
+        :return: 
+        """
+        if self.time_left() < self.TIMER_THRESHOLD:
+            raise SearchTimeout()
+        if depth == 0:
+            return self.score(game, self), (-1, -1), alpha, beta
+
+        val = -math.inf, (-1, -1), alpha, beta
+        for move in game.get_legal_moves():
+            child_node = game.forecast_move(move)
+            val = max(val, self.min_alpha_beta(child_node, depth - 1, alpha, beta))
+            alpha, beta = val[2:]
+            if val[0] >= beta:
+                return val[:2], alpha, beta
+            alpha = max(alpha, val[0])
+        return val[:2], alpha, beta
+
+    def min_alpha_beta(self, game, depth, alpha, beta):
+        """
+     
+        :return: 
+        """
+        if self.time_left() < self.TIMER_THRESHOLD:
+            raise SearchTimeout()
+        if depth == 0:
+            return self.score(game, self), alpha, beta
+
+        val = +math.inf, (-1, -1), alpha, beta
+        for move in game.get_legal_moves():
+            child_node = game.forecast_move(move)
+            val = min(val, self.max_alpha_beta(child_node, depth - 1, alpha, beta))
+            alpha, beta = val[2:]
+            if val[0] <= alpha:
+                return val[:2], alpha, beta
+            beta = min(beta, val[0])
+        return val[:2], alpha, beta
