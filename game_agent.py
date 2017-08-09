@@ -20,6 +20,11 @@ def custom_score(game, player):
     Note: this function should be called from within a Player instance as
     `self.score()` -- you should not need to call this function directly.
 
+    this method add an penalty factor for move of opponent, for the current
+    player, if his opponent has more move, his score will be decreased at a
+    double speed. This method is inspired by diegoalejogm for his test on 
+    various parameters of this penalty and 2 is the best case.
+    
     Parameters
     ----------
     game : `isolation.Board`
@@ -44,7 +49,7 @@ def custom_score(game, player):
     legal_moves = game.get_legal_moves(player=player)
     legal_moves_of_opponent = game.get_legal_moves(player=game.get_opponent(player=player))
 
-    return float(len(legal_moves) - len(legal_moves_of_opponent))
+    return float(len(legal_moves) - 2. * len(legal_moves_of_opponent))
 
 
 def custom_score_2(game, player):
@@ -54,6 +59,9 @@ def custom_score_2(game, player):
     Note: this function should be called from within a Player instance as
     `self.score()` -- you should not need to call this function directly.
 
+    this is inspired by center_score function in sample_players.py for the logic
+    is the closer player is in the center, the more score this player has.
+
     Parameters
     ----------
     game : `isolation.Board`
@@ -74,10 +82,11 @@ def custom_score_2(game, player):
     if game.is_winner(player=player):
         return math.inf
 
-    legal_moves = game.get_legal_moves(player=player)
-    legal_moves_of_opponent = game.get_legal_moves(player=game.get_opponent(player=player))
+    w, h = game.width / 2., game.height / 2.
+    y_1, x_1 = game.get_player_location(player)
+    y_2, x_2 = game.get_player_location(game.get_opponent(player))
 
-    return float(len(legal_moves) - 2 * len(legal_moves_of_opponent))
+    return float((h - y_1)**2 + (w - x_1)**2 - ((h - y_2)**2 + (w - x_2)**2))
 
 
 def custom_score_3(game, player):
@@ -107,9 +116,16 @@ def custom_score_3(game, player):
     if game.is_winner(player=player):
         return math.inf
 
-    w, h = game.width / 2., game.height / 2.
-    y, x = game.get_player_location(player)
-    return float((h - y)**2 + (w - x)**2)
+    legal_moves = game.get_legal_moves(player)
+    legal_moves_of_opponent = game.get_legal_moves(game.get_opponent(player))
+
+    future_act = [(len(game.forecast_move(m).get_legal_moves(player)), m) for m in legal_moves]
+    future_act_oppo = [(len(game.forecast_move(m).get_legal_moves(game.get_opponent(player))), m) for m in legal_moves_of_opponent]
+    len_move, _ = max(future_act) if len(future_act) else (0, (-1, -1))
+    len_move_oppo, _ = max(future_act_oppo) if len(future_act_oppo) else (0, (-1, -1))
+
+    return float(len_move - len_move_oppo + len(legal_moves) - len(legal_moves_of_opponent))
+
 
 class IsolationPlayer:
     """Base class for minimax and alphabeta agents -- this class is never
@@ -250,7 +266,7 @@ class MinimaxPlayer(IsolationPlayer):
         if self.time_left() < self.TIMER_THRESHOLD:
             raise SearchTimeout()
         if depth == 0:
-            return self.score(game, self), (-1, -1)  # add self to the score, it passes the funcationality
+            return self.score(game, self), (-1, -1)  # add self to the score, it passes the functionality
         val = -math.inf, (-1, -1)
         for move in game.get_legal_moves():
             child_node = game.forecast_move(move)
@@ -266,7 +282,7 @@ class MinimaxPlayer(IsolationPlayer):
             raise SearchTimeout()
         if depth == 0:
             return self.score(game, self), (-1, -1)
-        val = +math.inf, (-1, -1)  #TODO
+        val = +math.inf, (-1, -1)
         for move in game.get_legal_moves():
             child_node = game.forecast_move(move)
             val = min(val, self.max_val(child_node, depth - 1))
@@ -311,13 +327,16 @@ class AlphaBetaPlayer(IsolationPlayer):
         """
         self.time_left = time_left
 
-        depth = 4  #TODO: depth of the alphabeta
-        arr = []
+        depth = 1
+        arr = [(-1, -1)]
         try:
-            for i in range(depth):
+            while True:
                 arr.append(self.alphabeta(game, depth))
-        except:
-            return arr[-1]
+                depth += 1
+        except SearchTimeout:
+            pass
+
+        return arr[-1]
 
     def alphabeta(self, game, depth, alpha=float("-inf"), beta=float("inf")):
         """Implement depth-limited minimax search with alpha-beta pruning as
@@ -350,8 +369,6 @@ class AlphaBetaPlayer(IsolationPlayer):
         Returns
         -------
         (int, int)
-            The board coordinates of the best move found in the current search;
-            (-1, -1) if there are no legal moves
 
         Notes
         -----
@@ -367,47 +384,56 @@ class AlphaBetaPlayer(IsolationPlayer):
         """
         if self.time_left() < self.TIMER_THRESHOLD:
             raise SearchTimeout()
-        if depth == 0:
+        if depth == 0 or not game.get_legal_moves():
             return -1, -1
+        val = -math.inf
+        b_move = -1, -1
+        for move in game.get_legal_moves():
+            child_node = game.forecast_move(move)
+            val_tmp = self.min_alpha_beta(child_node, depth - 1, alpha, beta)
+            if val_tmp > val:
+                val, b_move = val_tmp, move
+            alpha = max(alpha, val)
+        return b_move
 
-        return self.max_alpha_beta(game, depth, alpha, beta)[1]
-
-    def max_alpha_beta(self, game, depth, alpha, beta):
+    def max_alpha_beta(self, game, depth, alpha, beta) -> float:
         """
  
-        :return: 
+        :return:         
+        score : float
+        
         """
         if self.time_left() < self.TIMER_THRESHOLD:
             raise SearchTimeout()
-        if depth == 0:
-            return self.score(game, self), (-1, -1), alpha, beta
-
-        val = -math.inf, (-1, -1), alpha, beta
+        if depth == 0:  # if there is no move, should I evaluate it or assign it an inf
+            return self.score(game, self)
+        val = float("-inf")
         for move in game.get_legal_moves():
             child_node = game.forecast_move(move)
-            val = max(val, self.min_alpha_beta(child_node, depth - 1, alpha, beta))
-            alpha, beta = val[2:]
-            if val[0] >= beta:
-                return val[:2], alpha, beta
-            alpha = max(alpha, val[0])
-        return val[:2], alpha, beta
+            val_tmp = self.min_alpha_beta(child_node, depth - 1, alpha, beta)
+            val = max(val_tmp, val)
+            if val >= beta:
+                return val
+            alpha = max(alpha, val)
+        return val
 
-    def min_alpha_beta(self, game, depth, alpha, beta):
+    def min_alpha_beta(self, game, depth, alpha, beta) -> float:
         """
      
         :return: 
+        score : float
+        
         """
         if self.time_left() < self.TIMER_THRESHOLD:
             raise SearchTimeout()
-        if depth == 0:
-            return self.score(game, self), alpha, beta
-
-        val = +math.inf, (-1, -1), alpha, beta
+        if depth == 0:  # if there is no move, should I evaluate it or assign it an inf
+            return self.score(game, self)
+        val = float("inf")
         for move in game.get_legal_moves():
             child_node = game.forecast_move(move)
-            val = min(val, self.max_alpha_beta(child_node, depth - 1, alpha, beta))
-            alpha, beta = val[2:]
-            if val[0] <= alpha:
-                return val[:2], alpha, beta
-            beta = min(beta, val[0])
-        return val[:2], alpha, beta
+            val_tmp = self.max_alpha_beta(child_node, depth - 1, alpha, beta)
+            val = min(val_tmp, val)
+            if val <= alpha:
+                return val
+            beta = min(beta, val)
+        return val
